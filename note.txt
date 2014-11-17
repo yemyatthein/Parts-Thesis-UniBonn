@@ -1,0 +1,53 @@
+temp:
+
+In root folder of the menthal_datalib directory
+------------------------------------------------------------
+config.py
+	- contains Configuration class, work like dict, can change default or overwrite
+contrib.py
+	- contains functions/classes that are used for analysis, users can customize by following them as example
+	- compute_correlation(): 3 params (time index, list of numbers, list of numbers), transform two list and assign time as their indexes, must have same dimensions (more ref: pandas documentation)
+	- LocationDataAnalysis class is used for getting bounding box, distance travelled and common region, given that a collection of user location data (e.g. input_location/inputs.csv)
+		- common region works like this - first making the plane in a grid and then try to find neighbouring cell and determine if the cell is to be counted in a currently considering region/ not so smart algorithm, kind of naive, should have just used K-Means + Quadtree or something to be more accurate.
+utils.py
+	- Utility functions like date roundings, transforming datetime string to hash string (simple string concats)
+------------------------------------------------------------
+
+In location_analysis package
+------------------------------------------------------------
+	- (This package is for doing location analysis, the idea of this analysis is first refine the events from input - grouping, rounding off date, etc - and processing the data - creating bounding box, common region, etc. In memory approach does this two steps in a serial flow and in each step with a simple loop, whereas in Hadoop mode, each step is a separate Hadoop job and submitted by a controller)
+	- contains three modules: core.py, analysis.py and hdjobs.py. 
+	- The core.py contains core classes used in this process. For example, LocationEventInstance class represents each row in the input file, UserEventProfile class is after grouping all location events for one user withing a given period (e.g. yearly, monthly). 
+	- The hdjobs.py contains two Hadoop jobs for each step as mention above. I called it refine job and process job.
+	- The analysis.py contains classes for running analysis for in-memory and hadoop mode. The idea of the flow is 
+		- Iterate each event (each line in csv file), and attach it with the associated UserEventProfile object (done in _add_user_profile() function)
+		- Write these file to refine_input file (specified by config object) on disk so that the next process method can make use of it. The reason for writing to disk instead of just passing it to next method is to be consistent with Hadoop style and also to record refined data for debug or other potential usage.
+		- process_data() method will use these data. It passes collection of events (per user, per period) to LocationDataAnalysis class and the LocationDataAnalysis class will then take care of analysis (bounding box, common region, etc) and return results. Results are returned and written back to disk.
+		- transfer_to_mongo() method takes these written result into mongodb. As all data involved is json, writting to mongodb does not require anything special modification. For Hadoop mode, writing is done by unix pipe and not so efficient. 
+
+		The above flow is done step by step for in-memory runner (job by job for Hadoop mode runner).
+
+		- LocationResultQueryManager is simply getting results from mongodb and provides a sample method for filtering results. 
+------------------------------------------------------------
+
+In metric_analysis package:
+------------------------------------------------------------
+	- It is used for analysis of two (or more) time series data. The idea is this package will arrange data in a timeline (consider like putting points of horizontal time line, some points may be missing for some time instance but that is handled and won't have any problem) and once the data is arranged in this aligned format, the "cal_func" - which is a calculation function for time series - will calculate whatever the logic is specified by the function. Example implementaiton is correlation in contribs.py, using pandas correlation function. Now, one thing to note is this package also divides the timeline per needed (period demands, yearly, monthly, etc). You can consider like a vertical line on a plane (horizontal line, x axis is time axis and vertical lines, y axis are for period.) The cal_func receives all data withing this vertical block. Refer to ths_pic_explain.jpg for more illustrative explanation.
+	- The flow is exactly the same, except instead of passing grouped/refined data into LocationDataAnalysis, now data are passed to calc_func function. Results are as with pervious one, written back to disk and later transfer_to_mongo() move them to mongodb.
+	- Hadoop mode will do the two steps in two separate hadoop jobs.
+
+	- MetricResultQueryManager class has same responsibility as LocationResultQueryManager.
+------------------------------------------------------------
+
+Usage:
+------------------------------------------------------------
+For location analysis:
+	- Refer to test_location.py in root folder.
+	- MyClass is subclass of LocationDataAnalysis class, to indicate u can customize the analysis function dynamically. (In example, no modification needed so just inerit functions from LocationDataAnalysis)
+	- User has to set distance function and analysis class. In example distance function is haversine from contrib.py
+	- Input is a database csv dump file and no modification is required.
+For metric analysis
+	- Input needs to be a little bit modified. Each file of input must be a unique metric (for example in my code, input_a.csv is for SMS event and input_b.csv is for phone call events. In addition, every lines in each file needs to be tagged with unique identified. For example, in input_a.csv, every line is with "_a" tag, and input_b.csv is with "_b" tag). These tag will be later used for differentiating the results. Fro instance, results will say between "_a" and "_b" metrics (in period 01-05-2010 between 01-06-2010) correlation is 0.567.
+------------------------------------------------------------
+
+***cannot put the input_location/inputs.csv because of sensitive data, so I put one dummy event line to indicate the format.****
