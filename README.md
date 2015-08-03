@@ -1,5 +1,5 @@
-University of Bonn, master thesis-related 
+#Data Analysis Framework (Utilities/Helpers/etc) 
 
-- Some part of source codes from my thesis, purely for sharing with my colleagues, not gonna be useful for others anyway. 
+Some part of source codes from my Master thesis at University of Bonn, Germany. Intended to share with my colleagues, not gonna be useful for others anyway. The thesis works revolve around data processing and analysis of the app called Menthal (https://menthal.org). It is a behavioral analysis of smart phone users' behaviors.
 
-Have a look in the notes.txt for some brief information @konradb  
+P.S. Have a look in the notes.txt for some brief information @konradb  
